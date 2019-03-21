@@ -1,4 +1,4 @@
-# roster_management_app
+# Roster Management App
 
 > Roster Management App
 
