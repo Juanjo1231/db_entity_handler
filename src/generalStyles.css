@@ -1,0 +1,28 @@
+body,
+html {
+  font-family: 'Avenir', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #34495e;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: #eeeeee;
+}
+  
+h1, h2, h3,
+h4, h5, h6 {
+  font-weight: normal;
+  margin: 0;
+}
+
+figure {
+  margin: 0;
+}
+
+a {
+  text-decoration: none;
+}
+a:visited {
+  color: unset;
+}
