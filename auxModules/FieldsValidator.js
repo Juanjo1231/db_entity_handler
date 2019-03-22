@@ -21,7 +21,8 @@ module.exports = function(fields_schema, fields_to_compare, err_handler) {
         // Field is required and has no default value.
         else if(fieldSchema.required) {
           let type = fieldSchema.type.name
-          let error = new Error(`${field} of type ${type} is required.`)
+          let error = new Error(`'${field}' of type ${type} is required.`)
+          error.name = 'REQUIRED_FIELD_MISSING'
           err_handler(error)
         }
       }
@@ -31,6 +32,7 @@ module.exports = function(fields_schema, fields_to_compare, err_handler) {
         if(userField.constructor != fieldSchema.type) {
           let type = fieldSchema.type.name
           let error = new Error(`${field} must be an instance of ${type} but ${typeof(userField)} was provided.`)
+          error.name = 'TYPE_MISMATCH'
           err_handler(error)
         }
       }
@@ -40,6 +42,7 @@ module.exports = function(fields_schema, fields_to_compare, err_handler) {
         if(userField.constructor != fieldSchema) {
           let type = fieldSchema.name
           let error = new Error(`${field} must be an instance of ${type} but ${typeof(userField)} was provided.`)
+          error.name = 'TYPE_MISMATCH'
           err_handler(error)
         }
       }
