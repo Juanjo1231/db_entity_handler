@@ -2,7 +2,11 @@ const mysql = require('mysql')
 const chalk = require('chalk')
 const DBEntityHandlerErrors = {
   INVALID_TYPE: 'INVALID_TYPE',
-  INVALID_PARAM_TYPE: 'INVALID_PARAM_TYPE'
+  INVALID_PARAM_TYPE: 'INVALID_PARAM_TYPE',
+  INVALID_COL_NAME: 'INVALID_COL_NAME',
+  NO_INSERT_VALUES: 'NO_INSERT_VALUES',
+  REQ_FIELD_MISSING: 'REQ_FIELD_MISSING',
+  TYPE_MISMATCH: 'TYPE_MISMATCH'
 }
 
 
@@ -24,26 +28,17 @@ class DBEntityHandler {
   }
 }
 /**
- * Throws an error in color red.
- */
-DBEntityHandler.prototype.throwError = function(msg) {
-  let error = msg.constructor === Error ? msg : new Error(msg)
-  throw chalk.red(error.stack)
-}
-/**
  * Creates a SELECT query based on the columns provided with optional SQL function to
  * apply to the columns, all columns are retreived if no columns are provided.
  * 
- * @param {Object} [columns = {}] List of columns to retreive with optional SQL function.
- * @param {String} columns[i].f   SQL function to apply to the column.
+ * @param {String} columns      List of columns to retreive with optional SQL function.
+ * @param {String} columns[n].f Name of a SQL function to apply to the column.
  * 
  * @returns self
  */
 DBEntityHandler.prototype.select = function(...columns) {
   // JSON or Array provided as the only param.
-  if(columns[0].constructor === Array || columns[0].constructor === Object) {
-    columns[0] = columns
-  }
+  if(columns[0].constructor === Array || columns[0].constructor === Object) {columns = columns[0]}
   let fields = []
 
   if(columns.length === 0) {
@@ -101,8 +96,11 @@ DBEntityHandler.prototype.where = function(conditions) {
   let filters = []
 
   for(let field in conditions) {
-    if(!this.schema[field])
-      this.throwError(`Invalid column name: ${field}. It does not exists in the entity schema.`)
+    if(!this.schema[field]) {
+      let error = new Error(`Invalid column name: ${field}. It does not exists in the entity schema.`)
+      error.name = DBEntityHandlerErrors.INVALID_COL_NAME
+      throw error
+    }
 
     let condition = conditions[field]
     filters.push( `${field} ${condition}` )
@@ -122,8 +120,11 @@ DBEntityHandler.prototype.orderBy = function(columns={}) {
   // Not conditions provided.
   if(!columns || Object.keys(columns).length === 0) return this
   // Invalid param.
-  if(columns.constructor != Object)
-    this.throwError(`Invalid param. Object is required but ${typeof(columns)} was provided.`)
+  if(columns.constructor != Object) {
+    let error = new Error(`Object is required but ${typeof(columns)} was provided.`)
+    error.name = DBEntityHandlerErrors.INVALID_PARAM_TYPE
+    throw error
+  }
   // Remove all after 'ORDER' if already exists in the query.
   let orderIndex = this.query.indexOf('ORDER')
   if(orderIndex != -1) {
@@ -178,18 +179,96 @@ DBEntityHandler.prototype.limit = function(n) {
   this.query += ` LIMIT ${n}`
   return this
 }
+/**
+ * Inserts the values in DB.
+ * 
+ * @param {String} table_name Name of the table to inser the data to.
+ * @param {Object} values     {col_name: col_value}.
+ * 
+ * @returns {Promise} Query result on resolved.
+ */
+DBEntityHandler.prototype.insert = function(table_name, values) {
+  if(!values || values.constructor != Object) {
+    let error = new Error('No values provided to insert in DB.')
+    error.name = DBEntityHandlerErrors.NO_INSERT_VALUES
+    throw error
+  }
 
-DBEntityHandler.prototype.insert = function(values={}) {}
+  for(let field in this.schema) {
+    let field_user   = values[field]
+    let field_schema = this.schema[field]
+    // Field not provided by user.
+    if(!field_user) {
+      // Default value in schema.
+      if(field_schema.default != undefined) {
+        values[field] = field_schema.default
+      }
+      // No default value in schema.
+      // Field is required.
+      else if(field_schema.required != undefined) {
+        let type  = field.type
+        let error = new Error(`A value for column ${field} of type ${type} is required but was not provided.`)
+        error.name = DBEntityHandlerErrors.REQ_FIELD_MISSING
+        throw error
+      }
+    }
+    // Field provided
+    else {
+      let expected_type = this.schema[field].type
+      // Type doesn't match schema.
+      if(field_user.constructor != expected_type) {
+        let error = new Error(`${expected_type.name} was expected for column ${field} but ${typeof(field_user)} was provided.`)
+        error.name = DBEntityHandlerErrors.TYPE_MISMATCH
+        throw error
+      }
+    }
+  }
 
+  this.buildInsertQuery(table_name, values)
+  return this.execute()
+}
+/**
+ * Builds the INSERT INTO query.
+ * 
+ * @param {String} table_name Name of the table to inser the data to.
+ * 
+ * @param {Object} values {col_name: col_value}.
+ */
+DBEntityHandler.prototype.buildInsertQuery = function(table_name, values) {
+  let qColumns = []
+  let qValues  = []
+  let qValPlaceholders = []
 
+  for(let col_name in values) {
+    qColumns.push(col_name)
+    qValues.push(values[col_name])
+    qValPlaceholders.push('?')
+  }
+
+  this.query = `INSERT INTO ${table_name}(${qColumns.join(', ')}) VALUES(${qValPlaceholders.join(', ')})`
+  this.query = mysql.format(this.query, qValues)
+}
+/**
+ * Connect to DB and execute the query.
+ * 
+ * @param {String} [query=this.query] Query to execute.
+ * 
+ * @returns {Promise} Query result on resolved.
+ */
 DBEntityHandler.prototype.execute = function(query=this.query) {
   return new Promise((resolve, reject) => {
     this.connection.connect(err => {
-      if(err) reject(err)
+      if(err) {
+        this.query = ''
+        reject(err)
+      }
   
-      this.connection.query(this.query, (err, result) => {
+      this.connection.query(query, (err, result) => {
         this.connection.end()
-        if(err) reject(err)
+        this.query = ''
+
+        if(err)
+          reject(err)
 
         resolve(result)
       })
