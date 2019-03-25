@@ -34,9 +34,9 @@ class Agent extends DBEntityHandler {
     })
   }
 
-  saveInDB(table_name=this.tableName, values=this.values) {
+  saveInDB() {
     return new Promise((resolve, reject) => {
-      this.insert(table_name, values).then(result => {
+      this.insert(this.tableName, this.values).then(result => {
         if(result.insertId) {
           this.id = result.insertId
         }
@@ -45,7 +45,7 @@ class Agent extends DBEntityHandler {
     })
   }
 
-  static saveInDB(table_name=this.tableName, values=this.values) {
+  static saveInDB(table_name, values) {
     return new Promise((resolve, reject) => {
       this.insert(table_name, values).then(result => {
         if(result.insertId) {
@@ -57,21 +57,4 @@ class Agent extends DBEntityHandler {
   }
 }
 
-
-
-let a = new Agent({
-  first_name: 'Nombre 9',
-  last_name: 'Apellido 9',
-  birthdate: new Date(1991, 11, 31),
-  sex: true,
-  email_address: 'nombre9@apellido.com',
-  effective_hire_date: new Date()
-})
-
-a.saveInDB()
-  .then(res => {
-    console.log(res)
-  })
-  .catch(err => {
-    console.log(err)
-  })
+module.exports = Agent
